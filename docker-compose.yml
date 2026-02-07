@@ -8,8 +8,9 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - /app/.next
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://backend:8000
     depends_on:
       - backend
 
@@ -19,11 +20,12 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - ./repos:/repos  # Git repos for documents
+      - ./repos:/repos
     environment:
       - DATABASE_URL=postgresql://vos:vos@db:5432/vos
       - REDIS_URL=redis://redis:6379
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - REPOS_PATH=/repos
     depends_on:
       - db
       - redis

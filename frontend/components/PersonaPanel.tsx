@@ -70,7 +70,7 @@ export function PersonaPanel({
                   : 'hover:bg-slate-50'
               }`}
               style={{ 
-                ringColor: isSelected ? persona.color : undefined,
+                boxShadow: isSelected ? `0 0 0 2px ${persona.color}` : undefined, // ringColor: isSelected ? persona.color : undefined,
                 borderLeft: `3px solid ${persona.color}`
               }}
             >

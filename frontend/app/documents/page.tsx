@@ -1,186 +1,130 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import DropZone from '@/components/DropZone';
 import Link from 'next/link';
-import { api, Document } from '@/lib/api';
+import { API_BASE_URL } from '@/lib/config';
+
+interface Document {
+  id: string;
+  title: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newDoc, setNewDoc] = useState({ title: '', content: '', description: '' });
-  const [creating, setCreating] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
-    loadDocuments();
+    fetchDocuments();
   }, []);
 
-  const loadDocuments = async () => {
+  const fetchDocuments = async () => {
     try {
-      const docs = await api.listDocuments();
-      setDocuments(docs);
+      const res = await fetch(`${API_BASE_URL}/api/v1/documents/`);
+      if (res.ok) {
+        const data = await res.json();
+        setDocuments(data);
+      }
     } catch (error) {
-      console.error('Failed to load documents:', error);
+      console.error('Failed to fetch documents:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDoc.title || !newDoc.content) return;
-    
-    setCreating(true);
-    try {
-      await api.createDocument(newDoc);
-      setShowCreate(false);
-      setNewDoc({ title: '', content: '', description: '' });
-      loadDocuments();
-    } catch (error) {
-      console.error('Failed to create document:', error);
-    } finally {
-      setCreating(false);
-    }
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-slate-800">
-            VOS
-          </Link>
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <Link href="/" className="text-slate-400 hover:text-white text-sm mb-2 inline-block">
+              ← Back
+            </Link>
+            <h1 className="text-3xl font-bold">Documents</h1>
+          </div>
           <button
-            onClick={() => setShowCreate(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            onClick={() => setShowUpload(!showUpload)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition-colors"
           >
-            + New Document
+            {showUpload ? 'Show Documents' : '+ New Document'}
           </button>
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-bold text-slate-800 mb-6">Documents</h1>
+        {showUpload ? (
+          <>
+            {/* Drop Zone */}
+            <DropZone />
 
-        {loading ? (
-          <div className="text-center py-12 text-slate-500">Loading...</div>
-        ) : documents.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-slate-500 mb-4">No documents yet</p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="text-indigo-600 hover:underline"
-            >
-              Create your first document
-            </button>
-          </div>
+            {/* Instructions */}
+            <div className="mt-8 grid md:grid-cols-3 gap-4 text-sm">
+              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
+                <div className="text-lg mb-2">1️⃣</div>
+                <p className="text-slate-400">Drop your <code className="text-indigo-400">.md</code> file</p>
+              </div>
+              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
+                <div className="text-lg mb-2">2️⃣</div>
+                <p className="text-slate-400">AI personas start reviewing instantly</p>
+              </div>
+              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
+                <div className="text-lg mb-2">3️⃣</div>
+                <p className="text-slate-400">Watch comments appear in real-time</p>
+              </div>
+            </div>
+          </>
         ) : (
-          <div className="grid gap-4">
-            {documents.map((doc) => (
-              <Link
-                key={doc.id}
-                href={`/documents/${doc.id}`}
-                className="block p-6 bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-800">
-                      {doc.title}
-                    </h2>
-                    {doc.description && (
-                      <p className="text-sm text-slate-500 mt-1">
-                        {doc.description}
-                      </p>
-                    )}
-                  </div>
-                  <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">
-                    {doc.versions.length} version{doc.versions.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="mt-4 flex items-center gap-4 text-xs text-slate-400">
-                  <span>Branch: {doc.current_branch}</span>
-                  <span>•</span>
-                  <span>Updated: {new Date(doc.updated_at).toLocaleDateString()}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+          <>
+            {/* Document List */}
+            {loading ? (
+              <div className="text-center py-12 text-slate-400">Loading documents...</div>
+            ) : documents.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-slate-400 mb-4">No documents yet</p>
+                <button
+                  onClick={() => setShowUpload(true)}
+                  className="text-indigo-400 hover:text-indigo-300"
+                >
+                  Upload your first document →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {documents.map((doc) => (
+                  <Link
+                    key={doc.id}
+                    href={`/documents/${doc.id}`}
+                    className="block bg-slate-800/50 hover:bg-slate-800 rounded-xl p-4 border border-slate-700 hover:border-slate-600 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-semibold text-lg">{doc.title}</h3>
+                        <p className="text-slate-400 text-sm mt-1">{doc.description}</p>
+                      </div>
+                      <div className="text-right text-xs text-slate-500">
+                        <div>{formatDate(doc.created_at)}</div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </>
         )}
-      </main>
-
-      {/* Create Modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl">
-            <form onSubmit={handleCreate}>
-              <div className="p-6 border-b">
-                <h2 className="text-xl font-semibold">Create Document</h2>
-              </div>
-              
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Title
-                  </label>
-                  <input
-                    type="text"
-                    value={newDoc.title}
-                    onChange={(e) => setNewDoc({ ...newDoc, title: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Document title"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Description (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newDoc.description}
-                    onChange={(e) => setNewDoc({ ...newDoc, description: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Brief description"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Content (Markdown)
-                  </label>
-                  <textarea
-                    value={newDoc.content}
-                    onChange={(e) => setNewDoc({ ...newDoc, content: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
-                    rows={12}
-                    placeholder="# Your document content here..."
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="p-6 border-t bg-slate-50 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(false)}
-                  className="px-4 py-2 text-slate-600 hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {creating ? 'Creating...' : 'Create Document'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
+    </main>
   );
 }

@@ -1,93 +1,289 @@
-import Link from 'next/link';
+'use client';
+
+import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { API_BASE_URL } from '@/lib/config';
 
 export default function Home() {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const router = useRouter();
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const processFile = async (file: File) => {
+    if (!file.name.endsWith('.md')) {
+      setUploadStatus('Only .md files accepted');
+      setTimeout(() => setUploadStatus(null), 3000);
+      return null;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reviews/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+      return await response.json();
+    } catch (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+  };
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.md'));
+    if (files.length === 0) {
+      setUploadStatus('Drop a markdown file');
+      setTimeout(() => setUploadStatus(null), 3000);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadStatus(`Processing ${files[0].name}...`);
+
+    const result = await processFile(files[0]);
+    if (result) {
+      setUploadStatus('Starting review...');
+      router.push(`/documents/${result.document_id}?autoReview=true`);
+    } else {
+      setIsUploading(false);
+      setUploadStatus('Upload failed');
+      setTimeout(() => setUploadStatus(null), 3000);
+    }
+  }, [router]);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.name.endsWith('.md')) {
+      setUploadStatus('Only .md files accepted');
+      setTimeout(() => setUploadStatus(null), 3000);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadStatus(`Processing ${file.name}...`);
+
+    const result = await processFile(file);
+    if (result) {
+      setUploadStatus('Starting review...');
+      router.push(`/documents/${result.document_id}?autoReview=true`);
+    } else {
+      setIsUploading(false);
+      setUploadStatus('Upload failed');
+      setTimeout(() => setUploadStatus(null), 3000);
+    }
+  }, [router]);
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white">
-      <div className="max-w-4xl mx-auto px-6 py-20">
-        {/* Hero */}
+    <main 
+      className="min-h-screen relative overflow-hidden"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{
+        background: isDragging 
+          ? 'linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #0c0c0c 100%)'
+          : 'linear-gradient(135deg, #0a0a0a 0%, #111118 50%, #0a0a0a 100%)',
+        transition: 'background 0.4s ease',
+      }}
+    >
+      {/* Subtle grid texture */}
+      <div 
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage: `
+            linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+          `,
+          backgroundSize: '60px 60px',
+        }}
+      />
+
+      {/* Radial glow when dragging */}
+      <div 
+        className={`absolute inset-0 transition-opacity duration-500 ${isDragging ? 'opacity-100' : 'opacity-0'}`}
+        style={{
+          background: 'radial-gradient(circle at 50% 40%, rgba(99, 102, 241, 0.15) 0%, transparent 60%)',
+        }}
+      />
+
+      {/* Content */}
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6">
+        
+        {/* Title - stark, editorial */}
         <div className="text-center mb-16">
-          <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-indigo-400 to-purple-400 text-transparent bg-clip-text">
+          <h1 
+            className="text-[12vw] md:text-[120px] font-black tracking-[-0.04em] leading-[0.85] mb-4"
+            style={{
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              background: isDragging 
+                ? 'linear-gradient(135deg, #fff 0%, #a5b4fc 100%)'
+                : 'linear-gradient(135deg, #f5f5f5 0%, #888 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              transition: 'all 0.4s ease',
+            }}
+          >
             VOS
           </h1>
-          <p className="text-xl text-slate-400 mb-2">
-            Voxora · Opinari · Scrutara
-          </p>
-          <p className="text-slate-500 text-sm italic">
-            Many voices. Many opinions. One scrutiny.
-          </p>
-        </div>
-
-        {/* Description */}
-        <div className="bg-slate-800/50 rounded-2xl p-8 mb-12 border border-slate-700">
-          <h2 className="text-2xl font-semibold mb-4">
-            Document Review with AI Personas
-          </h2>
-          <p className="text-slate-300 mb-6 leading-relaxed">
-            Upload any document and have it reviewed by a panel of AI personas — 
-            each with their own perspective, expertise, and critical lens. 
-            Security reviewers, technical architects, devil&apos;s advocates, 
-            and more examine your content simultaneously.
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-              <div className="w-3 h-3 rounded-full bg-red-500 mb-2"></div>
-              <span className="text-red-300">Security Reviewer</span>
-            </div>
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-              <div className="w-3 h-3 rounded-full bg-blue-500 mb-2"></div>
-              <span className="text-blue-300">Technical Architect</span>
-            </div>
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-              <div className="w-3 h-3 rounded-full bg-amber-500 mb-2"></div>
-              <span className="text-amber-300">Devil&apos;s Advocate</span>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
-              <div className="w-3 h-3 rounded-full bg-emerald-500 mb-2"></div>
-              <span className="text-emerald-300">Clarity Editor</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
-          <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700">
-            <div className="text-2xl mb-3">📝</div>
-            <h3 className="font-semibold mb-2">Git-Backed Versioning</h3>
-            <p className="text-sm text-slate-400">
-              Every edit creates a commit. View diffs, branch for alternatives, 
-              track who said what and when.
-            </p>
-          </div>
-          <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700">
-            <div className="text-2xl mb-3">🎭</div>
-            <h3 className="font-semibold mb-2">Customizable Personas</h3>
-            <p className="text-sm text-slate-400">
-              Create your own reviewer personas. Define their expertise, tone, 
-              and focus areas. Build review teams.
-            </p>
-          </div>
-          <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700">
-            <div className="text-2xl mb-3">⚡</div>
-            <h3 className="font-semibold mb-2">Real-Time Streaming</h3>
-            <p className="text-sm text-slate-400">
-              Watch feedback appear as personas analyze your document. 
-              No waiting for batch processing.
-            </p>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <div className="text-center">
-          <Link
-            href="/documents"
-            className="inline-block px-8 py-4 bg-indigo-600 hover:bg-indigo-700 rounded-xl font-semibold text-lg transition-colors"
+          <p 
+            className={`text-xs tracking-[0.4em] uppercase transition-colors duration-400 ${
+              isDragging ? 'text-indigo-300' : 'text-neutral-400'
+            }`}
           >
-            Get Started →
-          </Link>
-          <p className="mt-4 text-sm text-slate-500">
-            Start reviewing documents with AI-powered personas
+            Document Review · AI Personas
           </p>
         </div>
+
+        {/* The drop zone - this IS the interface */}
+        <label 
+          className={`
+            relative w-full max-w-2xl aspect-[16/9] rounded-2xl cursor-pointer
+            flex flex-col items-center justify-center
+            transition-all duration-400 ease-out
+            ${isDragging 
+              ? 'scale-[1.02] border-indigo-500/60' 
+              : 'border-neutral-800/60 hover:border-neutral-700'
+            }
+            ${isUploading ? 'pointer-events-none' : ''}
+          `}
+          style={{
+            border: '1px dashed',
+            borderColor: isDragging ? 'rgba(129, 140, 248, 0.6)' : 'rgba(64, 64, 64, 0.6)',
+            background: isDragging 
+              ? 'rgba(99, 102, 241, 0.04)'
+              : 'rgba(255, 255, 255, 0.01)',
+            boxShadow: isDragging 
+              ? '0 0 60px rgba(99, 102, 241, 0.1), inset 0 0 60px rgba(99, 102, 241, 0.03)'
+              : 'none',
+          }}
+        >
+          <input
+            type="file"
+            accept=".md"
+            onChange={handleFileSelect}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            disabled={isUploading}
+          />
+
+          {isUploading ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-neutral-400 text-sm tracking-wide">{uploadStatus}</span>
+            </div>
+          ) : (
+            <>
+              {/* Drop indicator */}
+              <div className={`
+                mb-6 transition-all duration-300
+                ${isDragging ? 'scale-110 opacity-100' : 'opacity-40'}
+              `}>
+                <svg 
+                  width="48" 
+                  height="48" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke={isDragging ? '#818cf8' : '#666'}
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="transition-colors duration-300"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <line x1="9" y1="15" x2="12" y2="12" />
+                  <line x1="15" y1="15" x2="12" y2="12" />
+                </svg>
+              </div>
+
+              <p className={`
+                text-lg font-medium tracking-tight transition-colors duration-300
+                ${isDragging ? 'text-indigo-300' : 'text-neutral-300'}
+              `}>
+                {isDragging ? 'Release to start review' : 'Drop a markdown file'}
+              </p>
+              
+              <p className="text-neutral-500 text-sm mt-2">
+                or click to browse
+              </p>
+
+              {uploadStatus && (
+                <p className="absolute bottom-8 text-amber-500/80 text-sm">
+                  {uploadStatus}
+                </p>
+              )}
+            </>
+          )}
+        </label>
+
+        {/* Subtle explainer */}
+        <div className={`
+          mt-16 text-center max-w-md transition-opacity duration-500
+          ${isDragging ? 'opacity-30' : 'opacity-100'}
+        `}>
+          <p className="text-neutral-500 text-sm leading-relaxed">
+            Your document will be reviewed by AI personas — each with their own perspective. 
+            <span className="text-neutral-400"> Watch feedback appear in real-time.</span>
+          </p>
+        </div>
+
+        {/* Persona indicators - subtle, at the bottom */}
+        <div className={`
+          absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-6 items-center
+          transition-opacity duration-500 ${isDragging ? 'opacity-0' : 'opacity-70'}
+        `}>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-rose-500" />
+            <span className="text-[10px] text-neutral-500 tracking-wide uppercase">Devil&apos;s Advocate</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[10px] text-neutral-500 tracking-wide uppercase">Supportive Editor</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-amber-500" />
+            <span className="text-[10px] text-neutral-500 tracking-wide uppercase">Technical Critic</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-sky-500" />
+            <span className="text-[10px] text-neutral-500 tracking-wide uppercase">Casual Reader</span>
+          </div>
+        </div>
+
+        {/* Link to existing documents - very subtle */}
+        <a 
+          href="/documents"
+          className={`
+            absolute top-6 right-6 text-xs text-neutral-500 hover:text-neutral-300 
+            transition-colors tracking-wide uppercase
+            ${isDragging ? 'opacity-0' : 'opacity-100'}
+          `}
+        >
+          Documents →
+        </a>
       </div>
     </main>
   );

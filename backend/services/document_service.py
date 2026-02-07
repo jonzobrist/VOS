@@ -8,16 +8,19 @@ from services.git_service import GitService
 
 class DocumentService:
     """Document management with git-backed versioning"""
+    _instance = None
+    _documents: dict = {}
     
-    def __init__(self):
-        self.git = GitService()
-        self._documents: dict = {}  # In-memory store (replace with DB later)
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.git = GitService()
+        return cls._instance
     
     def create(self, doc: DocumentCreate) -> Document:
         """Create a new document"""
         repo_id, repo_path = self.git.create_repo(doc.title.lower().replace(" ", "-"))
         
-        # Create the markdown file
         file_name = "document.md"
         commit_hash = self.git.commit_file(
             str(repo_path),
@@ -50,7 +53,6 @@ class DocumentService:
         """Get a document by ID"""
         doc = self._documents.get(doc_id)
         if doc:
-            # Refresh version history
             history = self.git.get_history(doc.repo_path)
             doc.versions = [
                 DocumentVersion(
@@ -81,13 +83,7 @@ class DocumentService:
         if not doc:
             raise ValueError(f"Document {doc_id} not found")
         
-        commit_hash = self.git.commit_file(
-            doc.repo_path,
-            "document.md",
-            content,
-            message
-        )
-        
+        self.git.commit_file(doc.repo_path, "document.md", content, message)
         doc.updated_at = datetime.utcnow()
         return self.get(doc_id)
     
@@ -98,30 +94,3 @@ class DocumentService:
             raise ValueError(f"Document {doc_id} not found")
         
         return self.git.get_diff(doc.repo_path, from_version, to_version, "document.md")
-    
-    def create_branch(self, doc_id: str, branch_name: str) -> Document:
-        """Create a new branch for the document"""
-        doc = self.get(doc_id)
-        if not doc:
-            raise ValueError(f"Document {doc_id} not found")
-        
-        self.git.create_branch(doc.repo_path, branch_name)
-        return doc
-    
-    def switch_branch(self, doc_id: str, branch_name: str) -> Document:
-        """Switch document to a different branch"""
-        doc = self.get(doc_id)
-        if not doc:
-            raise ValueError(f"Document {doc_id} not found")
-        
-        self.git.switch_branch(doc.repo_path, branch_name)
-        doc.current_branch = branch_name
-        return doc
-    
-    def list_branches(self, doc_id: str) -> List[dict]:
-        """List branches for a document"""
-        doc = self.get(doc_id)
-        if not doc:
-            raise ValueError(f"Document {doc_id} not found")
-        
-        return self.git.list_branches(doc.repo_path)

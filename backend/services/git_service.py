@@ -49,7 +49,7 @@ class GitService:
         
         commit = repo.index.commit(
             message,
-            author=repo.config_reader().get_value("user", "name"),
+            # author is read from git config
         )
         
         return commit.hexsha
