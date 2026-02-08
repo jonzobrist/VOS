@@ -1,128 +1,108 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import DropZone from '@/components/DropZone';
 import Link from 'next/link';
-import { API_BASE_URL } from '@/lib/config';
-
-interface Document {
-  id: string;
-  title: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-}
+import { useRouter } from 'next/navigation';
+import { fetchDocuments, uploadFile, type Document } from '@/lib/api';
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showUpload, setShowUpload] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
-    fetchDocuments();
+    fetchDocuments()
+      .then(setDocuments)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
-  const fetchDocuments = async () => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.name.endsWith('.md')) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/documents/`);
-      if (res.ok) {
-        const data = await res.json();
-        setDocuments(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch documents:', error);
-    } finally {
-      setLoading(false);
+      const result = await uploadFile(file);
+      router.push(`/documents/${result.document_id}?autoReview=true`);
+    } catch (err) {
+      console.error('Upload failed:', err);
     }
   };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+    <main className="min-h-screen bg-[#0a0a0f]">
       <div className="max-w-4xl mx-auto px-6 py-12">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-10">
           <div>
-            <Link href="/" className="text-slate-400 hover:text-white text-sm mb-2 inline-block">
-              ← Back
+            <Link href="/" className="text-neutral-500 hover:text-neutral-300 text-xs tracking-wide uppercase mb-3 inline-block transition-colors">
+              VOS
             </Link>
-            <h1 className="text-3xl font-bold">Documents</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           </div>
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition-colors"
-          >
-            {showUpload ? 'Show Documents' : '+ New Document'}
-          </button>
+          <label className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+            + Upload
+            <input type="file" accept=".md" onChange={handleFileUpload} className="hidden" />
+          </label>
         </div>
 
-        {showUpload ? (
-          <>
-            {/* Drop Zone */}
-            <DropZone />
-
-            {/* Instructions */}
-            <div className="mt-8 grid md:grid-cols-3 gap-4 text-sm">
-              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
-                <div className="text-lg mb-2">1️⃣</div>
-                <p className="text-slate-400">Drop your <code className="text-indigo-400">.md</code> file</p>
+        {/* Content */}
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-[#12121a] rounded-xl p-5 border border-[#2a2a3a] animate-pulse">
+                <div className="h-5 bg-[#1a1a25] rounded w-1/3 mb-3" />
+                <div className="h-3 bg-[#1a1a25] rounded w-2/3" />
               </div>
-              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
-                <div className="text-lg mb-2">2️⃣</div>
-                <p className="text-slate-400">AI personas start reviewing instantly</p>
-              </div>
-              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
-                <div className="text-lg mb-2">3️⃣</div>
-                <p className="text-slate-400">Watch comments appear in real-time</p>
-              </div>
+            ))}
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="text-4xl mb-4 opacity-30">
+              <svg className="w-16 h-16 mx-auto text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             </div>
-          </>
+            <p className="text-neutral-500 mb-4">No documents yet</p>
+            <Link href="/" className="text-indigo-400 hover:text-indigo-300 text-sm">
+              Upload your first document
+            </Link>
+          </div>
         ) : (
-          <>
-            {/* Document List */}
-            {loading ? (
-              <div className="text-center py-12 text-slate-400">Loading documents...</div>
-            ) : documents.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-slate-400 mb-4">No documents yet</p>
-                <button
-                  onClick={() => setShowUpload(true)}
-                  className="text-indigo-400 hover:text-indigo-300"
-                >
-                  Upload your first document →
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {documents.map((doc) => (
-                  <Link
-                    key={doc.id}
-                    href={`/documents/${doc.id}`}
-                    className="block bg-slate-800/50 hover:bg-slate-800 rounded-xl p-4 border border-slate-700 hover:border-slate-600 transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-semibold text-lg">{doc.title}</h3>
-                        <p className="text-slate-400 text-sm mt-1">{doc.description}</p>
+          <div className="space-y-2">
+            {documents.map((doc) => (
+              <Link
+                key={doc.id}
+                href={`/documents/${doc.id}`}
+                className="block bg-[#12121a] hover:bg-[#16161f] rounded-xl p-5 border border-[#2a2a3a] hover:border-[#3a3a4a] transition-all group"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-[#e4e4ec] group-hover:text-white transition-colors truncate">
+                      {doc.title}
+                    </h3>
+                    {doc.description && (
+                      <p className="text-neutral-500 text-sm mt-1 truncate">{doc.description}</p>
+                    )}
+                  </div>
+                  <div className="text-right ml-4 flex-shrink-0">
+                    <div className="text-xs text-neutral-500">{formatDate(doc.created_at)}</div>
+                    {doc.review_count > 0 && (
+                      <div className="text-xs text-indigo-400 mt-1">
+                        {doc.review_count} review{doc.review_count !== 1 ? 's' : ''}
                       </div>
-                      <div className="text-right text-xs text-slate-500">
-                        <div>{formatDate(doc.created_at)}</div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
       </div>
     </main>

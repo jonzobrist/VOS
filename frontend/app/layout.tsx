@@ -3,7 +3,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'VOS - Document Review',
-  description: 'Voxora · Opinari · Scrutara',
+  description: 'Voxora · Opinari · Scrutara — AI-powered multi-persona document review',
 }
 
 export default function RootLayout({
@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className="bg-slate-50 text-slate-900">{children}</body>
+    <html lang="en" className="dark">
+      <body className="bg-[#0a0a0f] text-[#e4e4ec] antialiased">{children}</body>
     </html>
   )
 }

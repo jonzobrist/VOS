@@ -1,3 +1,87 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a25;
+  --border: #2a2a3a;
+  --text-primary: #e4e4ec;
+  --text-secondary: #8888a0;
+  --accent: #6366f1;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Markdown rendered content */
+.prose-vos h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: #e4e4ec; }
+.prose-vos h2 { font-size: 1.375rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: #e4e4ec; }
+.prose-vos h3 { font-size: 1.125rem; font-weight: 600; margin: 1rem 0 0.5rem; color: #d4d4dc; }
+.prose-vos p { margin: 0.5rem 0; line-height: 1.7; color: #c4c4d4; }
+.prose-vos ul, .prose-vos ol { margin: 0.5rem 0; padding-left: 1.5rem; color: #c4c4d4; }
+.prose-vos li { margin: 0.25rem 0; line-height: 1.6; }
+.prose-vos code {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+.prose-vos pre {
+  background: #0f0f18;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+.prose-vos pre code {
+  background: none;
+  padding: 0;
+  color: #c4c4d4;
+}
+.prose-vos blockquote {
+  border-left: 3px solid #6366f1;
+  padding-left: 1rem;
+  margin: 0.75rem 0;
+  color: #9999b0;
+  font-style: italic;
+}
+.prose-vos a { color: #818cf8; text-decoration: underline; }
+.prose-vos hr { border-color: #2a2a3a; margin: 1.5rem 0; }
+.prose-vos strong { color: #e4e4ec; font-weight: 600; }
+.prose-vos table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+.prose-vos th, .prose-vos td { border: 1px solid #2a2a3a; padding: 0.5rem 0.75rem; text-align: left; }
+.prose-vos th { background: #1a1a25; font-weight: 600; }
+
+/* Animations */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-slide-in { animation: slideIn 0.3s ease-out; }
+.animate-pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }

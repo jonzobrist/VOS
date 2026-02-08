@@ -1,88 +1,104 @@
-from fastapi import APIRouter, HTTPException
+import uuid
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from models.document import Document, DocumentCreate
-from services.document_service import DocumentService
+from database import get_db, DbDocument
 
 router = APIRouter()
-doc_service = DocumentService()
 
-class UpdateRequest(BaseModel):
+
+class DocumentOut(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
     content: str
-    message: str
+    created_at: str
+    updated_at: str
+    review_count: int = 0
 
-class BranchRequest(BaseModel):
-    branch_name: str
 
-@router.post("/", response_model=Document)
-async def create_document(doc: DocumentCreate):
-    """Create a new document"""
-    return doc_service.create(doc)
+class DocumentCreate(BaseModel):
+    title: str
+    content: str
+    description: Optional[str] = None
 
-@router.get("/", response_model=List[Document])
-async def list_documents():
-    """List all documents"""
-    return doc_service.list()
 
-@router.get("/{doc_id}", response_model=Document)
-async def get_document(doc_id: str):
-    """Get a document by ID"""
-    doc = doc_service.get(doc_id)
-    if not doc:
+@router.post("/", response_model=DocumentOut)
+async def create_document(doc: DocumentCreate, db: Session = Depends(get_db)):
+    doc_id = str(uuid.uuid4())[:8]
+    now = datetime.utcnow()
+    db_doc = DbDocument(
+        id=doc_id,
+        title=doc.title,
+        description=doc.description,
+        content=doc.content,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(db_doc)
+    db.commit()
+    db.refresh(db_doc)
+
+    return DocumentOut(
+        id=db_doc.id,
+        title=db_doc.title,
+        description=db_doc.description,
+        content=db_doc.content,
+        created_at=db_doc.created_at.isoformat(),
+        updated_at=db_doc.updated_at.isoformat(),
+        review_count=len(db_doc.reviews),
+    )
+
+
+@router.get("/", response_model=List[DocumentOut])
+async def list_documents(db: Session = Depends(get_db)):
+    docs = db.query(DbDocument).order_by(DbDocument.created_at.desc()).all()
+    return [
+        DocumentOut(
+            id=d.id,
+            title=d.title,
+            description=d.description,
+            content=d.content,
+            created_at=d.created_at.isoformat(),
+            updated_at=d.updated_at.isoformat(),
+            review_count=len(d.reviews),
+        )
+        for d in docs
+    ]
+
+
+@router.get("/{doc_id}", response_model=DocumentOut)
+async def get_document(doc_id: str, db: Session = Depends(get_db)):
+    d = db.query(DbDocument).filter(DbDocument.id == doc_id).first()
+    if not d:
         raise HTTPException(status_code=404, detail="Document not found")
-    return doc
+    return DocumentOut(
+        id=d.id,
+        title=d.title,
+        description=d.description,
+        content=d.content,
+        created_at=d.created_at.isoformat(),
+        updated_at=d.updated_at.isoformat(),
+        review_count=len(d.reviews),
+    )
+
 
 @router.get("/{doc_id}/content")
-async def get_document_content(doc_id: str, version: Optional[str] = None):
-    """Get document content (optionally at specific version)"""
-    try:
-        content = doc_service.get_content(doc_id, version)
-        return {"content": content, "version": version}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+async def get_document_content(doc_id: str, db: Session = Depends(get_db)):
+    d = db.query(DbDocument).filter(DbDocument.id == doc_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"content": d.content}
 
-@router.put("/{doc_id}")
-async def update_document(doc_id: str, update: UpdateRequest):
-    """Update document content (creates new version)"""
-    try:
-        doc = doc_service.update(doc_id, update.content, update.message)
-        return doc
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/{doc_id}/diff")
-async def get_document_diff(doc_id: str, from_version: str, to_version: Optional[str] = None):
-    """Get diff between versions"""
-    try:
-        diff = doc_service.get_diff(doc_id, from_version, to_version)
-        return {"diff": diff, "from": from_version, "to": to_version or "HEAD"}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-@router.get("/{doc_id}/branches")
-async def list_branches(doc_id: str):
-    """List all branches for a document"""
-    try:
-        branches = doc_service.list_branches(doc_id)
-        return {"branches": branches}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-@router.post("/{doc_id}/branches")
-async def create_branch(doc_id: str, req: BranchRequest):
-    """Create a new branch"""
-    try:
-        doc = doc_service.create_branch(doc_id, req.branch_name)
-        return {"message": f"Branch '{req.branch_name}' created", "document": doc}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-@router.post("/{doc_id}/branches/{branch_name}/checkout")
-async def checkout_branch(doc_id: str, branch_name: str):
-    """Switch to a branch"""
-    try:
-        doc = doc_service.switch_branch(doc_id, branch_name)
-        return {"message": f"Switched to branch '{branch_name}'", "document": doc}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+@router.delete("/{doc_id}")
+async def delete_document(doc_id: str, db: Session = Depends(get_db)):
+    d = db.query(DbDocument).filter(DbDocument.id == doc_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(d)
+    db.commit()
+    return {"message": "Document deleted"}

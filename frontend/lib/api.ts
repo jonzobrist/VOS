@@ -1,21 +1,13 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from './config';
 
 export interface Document {
   id: string;
   title: string;
   description?: string;
-  repo_path: string;
-  current_branch: string;
+  content: string;
   created_at: string;
   updated_at: string;
-  versions: DocumentVersion[];
-}
-
-export interface DocumentVersion {
-  commit_hash: string;
-  message: string;
-  author: string;
-  timestamp: string;
+  review_count: number;
 }
 
 export interface Persona {
@@ -34,80 +26,136 @@ export interface Comment {
   persona_id: string;
   persona_name: string;
   persona_color: string;
-  document_id: string;
-  version_hash: string;
-  anchor: {
-    file_path: string;
-    start_line: number;
-    end_line: number;
-  };
+  start_line: number;
+  end_line: number;
   created_at: string;
 }
 
-class ApiClient {
-  private baseUrl: string;
-
-  constructor(baseUrl: string = API_BASE) {
-    this.baseUrl = baseUrl;
-  }
-
-  private async fetch<T>(path: string, options?: RequestInit): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    });
-    
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
-    }
-    
-    return res.json();
-  }
-
-  // Documents
-  async listDocuments(): Promise<Document[]> {
-    return this.fetch('/api/v1/documents/');
-  }
-
-  async getDocument(id: string): Promise<Document> {
-    return this.fetch(`/api/v1/documents/${id}`);
-  }
-
-  async createDocument(data: { title: string; content: string; description?: string }): Promise<Document> {
-    return this.fetch('/api/v1/documents/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async getDocumentContent(id: string, version?: string): Promise<{ content: string; version: string | null }> {
-    const params = version ? `?version=${version}` : '';
-    return this.fetch(`/api/v1/documents/${id}/content${params}`);
-  }
-
-  async updateDocument(id: string, content: string, message: string): Promise<Document> {
-    return this.fetch(`/api/v1/documents/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content, message }),
-    });
-  }
-
-  async getDocumentDiff(id: string, fromVersion: string, toVersion?: string): Promise<{ diff: string }> {
-    const params = toVersion ? `?from_version=${fromVersion}&to_version=${toVersion}` : `?from_version=${fromVersion}`;
-    return this.fetch(`/api/v1/documents/${id}/diff${params}`);
-  }
-
-  // Personas
-  async listPersonas(): Promise<Persona[]> {
-    return this.fetch('/api/v1/personas/');
-  }
-
-  async getPersona(id: string): Promise<Persona> {
-    return this.fetch(`/api/v1/personas/${id}`);
-  }
+export interface ReviewSummary {
+  id: string;
+  document_id: string;
+  persona_ids: string[];
+  status: string;
+  created_at: string;
+  completed_at?: string;
+  comment_count: number;
 }
 
-export const api = new ApiClient();
+export interface PersonaStatus {
+  persona_id: string;
+  persona_name: string;
+  persona_color: string;
+  status: 'queued' | 'running' | 'completed';
+}
+
+export async function fetchDocuments(): Promise<Document[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/documents/`);
+  if (!res.ok) throw new Error('Failed to fetch documents');
+  return res.json();
+}
+
+export async function fetchDocument(id: string): Promise<Document> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/documents/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch document');
+  return res.json();
+}
+
+export async function fetchPersonas(): Promise<Persona[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/personas/`);
+  if (!res.ok) throw new Error('Failed to fetch personas');
+  return res.json();
+}
+
+export async function uploadFile(file: File): Promise<{ document_id: string; title: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE_URL}/api/v1/reviews/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error('Upload failed');
+  return res.json();
+}
+
+export async function uploadRaw(content: string, title?: string): Promise<{ document_id: string; title: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/reviews/upload/raw`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, title }),
+  });
+  if (!res.ok) throw new Error('Upload failed');
+  return res.json();
+}
+
+export async function fetchReviews(docId: string): Promise<ReviewSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/reviews/${docId}/reviews`);
+  if (!res.ok) throw new Error('Failed to fetch reviews');
+  return res.json();
+}
+
+export async function fetchLatestComments(docId: string): Promise<Comment[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/reviews/${docId}/reviews/latest/comments`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export function startReviewStream(
+  docId: string,
+  personaIds: string[],
+  onEvent: (event: {
+    type: string;
+    persona_id?: string;
+    persona_name?: string;
+    persona_color?: string;
+    status?: string;
+    comment?: Comment;
+    total_comments?: number;
+  }) => void,
+  onError: (err: Error) => void,
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/reviews/${docId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ persona_ids: personaIds }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error('Failed to start review');
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error('No response body');
+
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              onEvent(data);
+            } catch {
+              // skip malformed SSE lines
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        onError(err);
+      }
+    }
+  })();
+
+  return controller;
+}
