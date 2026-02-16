@@ -86,10 +86,12 @@ export default function DocumentDetailPage() {
       .catch((err) => setError(err.message));
   }, [docId]);
 
-  // Auto-review once
+  // Auto-review once, then strip the query param from the URL
   useEffect(() => {
     if (autoReview && document && personas.length > 0 && !hasStartedAutoReview.current) {
       hasStartedAutoReview.current = true;
+      // Strip autoReview param so bookmarks/refreshes don't re-trigger
+      window.history.replaceState({}, '', `/documents/${docId}`);
       doReview(personas.map(p => p.id));
     }
   }, [autoReview, document, personas]);

@@ -1,8 +1,11 @@
 import uuid
 import json
+import logging
 from datetime import datetime
 from typing import List
 from anthropic import AsyncAnthropic
+
+logger = logging.getLogger(__name__)
 
 from core.config import get_settings
 from models.meta_comment import MetaComment, MetaCommentSource
@@ -48,7 +51,12 @@ class MetaService:
         if not comments:
             return []
 
-        groups = self._group_comments_by_location(comments)
+        # Filter out failed review comments before synthesis
+        valid_comments = [c for c in comments if not c.get("content", "").startswith("Review failed:")]
+        if not valid_comments:
+            return []
+
+        groups = self._group_comments_by_location(valid_comments)
 
         # Build the prompt for Claude
         groups_text = ""
@@ -96,8 +104,8 @@ IMPORTANT: Return ONLY the JSON array, no markdown formatting, no code blocks, n
                     response_text = response_text[:-3].strip()
 
             synthesis = json.loads(response_text)
-        except Exception:
-            # Fallback: create simple meta-comments per group without synthesis
+        except Exception as e:
+            logger.warning(f"Meta synthesis LLM call failed, using fallback: {e}")
             return self._fallback_synthesis(groups)
 
         meta_comments = []
@@ -144,11 +152,9 @@ IMPORTANT: Return ONLY the JSON array, no markdown formatting, no code blocks, n
         return meta_comments
 
     def _fallback_synthesis(self, groups: list[dict]) -> List[MetaComment]:
-        """Simple fallback when Claude synthesis fails."""
+        """Structured fallback when Claude synthesis fails — summarizes per group."""
         meta_comments = []
         for group in groups:
-            contents = [c["content"] for c in group["comments"]]
-            merged = " | ".join(contents)
             sources = [
                 MetaCommentSource(
                     persona_id=c["persona_id"],
@@ -158,14 +164,53 @@ IMPORTANT: Return ONLY the JSON array, no markdown formatting, no code blocks, n
                 )
                 for c in group["comments"]
             ]
+
+            # Build a readable summary instead of pipe-concatenation
+            persona_count = len(set(c["persona_name"] for c in group["comments"]))
+            if persona_count == 1:
+                # Single persona — just use their comment directly
+                content = group["comments"][0]["content"]
+            else:
+                # Multiple personas — create a bullet-style summary
+                points = []
+                for c in group["comments"]:
+                    points.append(f"{c['persona_name']}: {c['content']}")
+                content = f"{persona_count} reviewers commented on this section. " + points[0]
+                if len(points) > 1:
+                    content += f" Additionally, {points[1].lower()}"
+
+            # Infer priority from keywords
+            combined_text = " ".join(c["content"].lower() for c in group["comments"])
+            if any(w in combined_text for w in ["critical", "vulnerability", "security risk", "urgent"]):
+                priority = "critical"
+            elif any(w in combined_text for w in ["important", "significant", "high"]):
+                priority = "high"
+            elif any(w in combined_text for w in ["minor", "nit", "optional", "consider"]):
+                priority = "low"
+            else:
+                priority = "medium"
+
+            # Infer category from persona types
+            persona_ids = set(c.get("persona_id", "") for c in group["comments"])
+            if "security-reviewer" in persona_ids:
+                category = "security"
+            elif "technical-architect" in persona_ids:
+                category = "technical"
+            elif "accessibility-advocate" in persona_ids:
+                category = "accessibility"
+            elif "casual-reader" in persona_ids:
+                category = "clarity"
+            else:
+                category = "structure"
+
             meta_comments.append(MetaComment(
                 id=str(uuid.uuid4())[:8],
-                content=merged,
+                content=content,
                 start_line=group["start_line"],
                 end_line=group["end_line"],
                 sources=sources,
-                category="clarity",
-                priority="medium",
+                category=category,
+                priority=priority,
                 created_at=datetime.utcnow(),
             ))
         return meta_comments
