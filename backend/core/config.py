@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     repos_base_path: str = "/tmp/vos-repos"
     debug: bool = False
+    rate_limit_enabled: bool = True
+    rate_limit_per_minute: int = 60
+    csrf_enabled: bool = True
 
     class Config:
         env_file = ".env"
