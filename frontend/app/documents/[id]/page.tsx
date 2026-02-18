@@ -11,7 +11,7 @@ import {
   type MetaComment, type MetaReview,
 } from '@/lib/api';
 
-type ViewMode = 'meta' | 'individual';
+type ViewMode = 'summary' | 'meta' | 'individual';
 
 const PRIORITY_COLORS: Record<string, string> = {
   critical: '#ef4444',
@@ -47,7 +47,7 @@ export default function DocumentDetailPage() {
   const [filterPersona, setFilterPersona] = useState<string | null>(null);
 
   // Meta review state
-  const [viewMode, setViewMode] = useState<ViewMode>('meta');
+  const [viewMode, setViewMode] = useState<ViewMode>('summary');
   const [metaComments, setMetaComments] = useState<MetaComment[]>([]);
   const [metaVerdict, setMetaVerdict] = useState<string | null>(null);
   const [metaConfidence, setMetaConfidence] = useState<number>(0);
@@ -55,6 +55,7 @@ export default function DocumentDetailPage() {
   const [expandedMetaId, setExpandedMetaId] = useState<string | null>(null);
   const [hoveredPersonaId, setHoveredPersonaId] = useState<string | null>(null);
   const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const commentsPanelRef = useRef<HTMLDivElement>(null);
@@ -108,7 +109,7 @@ export default function DocumentDetailPage() {
       setMetaComments(result.comments);
       setMetaVerdict(result.verdict);
       setMetaConfidence(result.confidence);
-      setViewMode('meta');
+      setViewMode('summary');
     } catch {
       // Synthesis failed, stay on individual view
     } finally {
@@ -173,7 +174,7 @@ export default function DocumentDetailPage() {
   const lineHighlights = useCallback(() => {
     const highlights: Map<number, { commentId: string; color: string }[]> = new Map();
 
-    if (viewMode === 'meta' && metaComments.length > 0) {
+    if ((viewMode === 'meta' || viewMode === 'summary') && metaComments.length > 0) {
       metaComments.forEach((mc) => {
         const color = PRIORITY_COLORS[mc.priority] || PRIORITY_COLORS.medium;
         for (let line = mc.start_line; line <= mc.end_line; line++) {
@@ -405,9 +406,19 @@ export default function DocumentDetailPage() {
         <div className="w-[380px] border-l border-[#2a2a3a] bg-[#0c0c12] flex flex-col flex-shrink-0">
           {/* View mode toggle + header */}
           <div className="p-3 border-b border-[#2a2a3a]">
-            {/* Toggle: Meta Review | Individual Reviews */}
+            {/* Toggle: Summary | Meta Review | Individual Reviews */}
             {(metaComments.length > 0 || comments.length > 0) && (
               <div className="flex rounded-lg bg-[#12121a] p-0.5 mb-2.5">
+                <button
+                  onClick={() => setViewMode('summary')}
+                  className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all ${
+                    viewMode === 'summary'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-neutral-500 hover:text-neutral-300'
+                  }`}
+                >
+                  Summary
+                </button>
                 <button
                   onClick={() => setViewMode('meta')}
                   className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all ${
@@ -416,7 +427,7 @@ export default function DocumentDetailPage() {
                       : 'text-neutral-500 hover:text-neutral-300'
                   }`}
                 >
-                  Meta Review
+                  Details
                   {metaComments.length > 0 && (
                     <span className={`ml-1 ${viewMode === 'meta' ? 'text-indigo-200' : 'text-neutral-600'}`}>
                       ({metaComments.length})
@@ -444,7 +455,7 @@ export default function DocumentDetailPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">
-                {viewMode === 'meta' ? 'Meta Review' : 'Comments'}
+                {viewMode === 'summary' ? 'Summary' : viewMode === 'meta' ? 'Meta Review' : 'Comments'}
                 {viewMode === 'individual' && comments.length > 0 && (
                   <span className="text-neutral-500 font-normal ml-1">({sortedComments.length})</span>
                 )}
@@ -480,6 +491,216 @@ export default function DocumentDetailPage() {
 
           {/* Comments/Meta list */}
           <div ref={commentsPanelRef} className="flex-1 overflow-auto p-3 space-y-2">
+            {/* SUMMARY VIEW */}
+            {viewMode === 'summary' && (
+              <>
+                {metaComments.length === 0 && !isSynthesizing && !isReviewing && (
+                  <div className="text-center text-neutral-500 py-12">
+                    <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <p className="text-sm">No summary yet</p>
+                    <p className="text-xs mt-1 text-neutral-600">Run a review to generate synthesized feedback</p>
+                  </div>
+                )}
+
+                {isSynthesizing && (
+                  <div className="flex items-center justify-center py-6 gap-2">
+                    <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-neutral-500">Synthesizing meta review...</span>
+                  </div>
+                )}
+
+                {metaVerdict && metaComments.length > 0 && (
+                  <>
+                    {/* Verdict badge */}
+                    <div className={`rounded-lg p-4 border ${
+                      metaVerdict === 'ship_it' ? 'bg-green-500/10 border-green-500/30' :
+                      metaVerdict === 'fix_first' ? 'bg-yellow-500/10 border-yellow-500/30' :
+                      'bg-red-500/10 border-red-500/30'
+                    }`}>
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${
+                          metaVerdict === 'ship_it' ? 'bg-green-500/20 text-green-400' :
+                          metaVerdict === 'fix_first' ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-red-500/20 text-red-400'
+                        }`}>
+                          {metaVerdict === 'ship_it' ? '\u2713' : metaVerdict === 'fix_first' ? '\u26A0' : '\u2717'}
+                        </div>
+                        <div>
+                          <div className={`text-base font-bold ${
+                            metaVerdict === 'ship_it' ? 'text-green-400' :
+                            metaVerdict === 'fix_first' ? 'text-yellow-400' :
+                            'text-red-400'
+                          }`}>
+                            {metaVerdict === 'ship_it' ? 'Ship It' :
+                             metaVerdict === 'fix_first' ? 'Fix First' :
+                             'Major Rework'}
+                          </div>
+                          <div className="text-[11px] text-neutral-500">
+                            {metaComments.length} finding{metaComments.length !== 1 ? 's' : ''} from {
+                              new Set(metaComments.flatMap(mc => mc.sources.map(s => s.persona_id))).size
+                            } reviewers
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Confidence indicator */}
+                      <div className="mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Consensus</span>
+                          <span className="text-[11px] text-neutral-400">
+                            {(() => {
+                              const uniqueContributing = new Set(metaComments.flatMap(mc => mc.sources.map(s => s.persona_id)));
+                              const totalUsed = commentPersonas.length;
+                              return `${uniqueContributing.size}/${totalUsed} reviewers agree`;
+                            })()}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-[#1a1a25] rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              metaVerdict === 'ship_it' ? 'bg-green-500' :
+                              metaVerdict === 'fix_first' ? 'bg-yellow-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${Math.round(metaConfidence * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dealbreakers section: critical + high */}
+                    {(() => {
+                      const dealbreakers = sortedMetaComments.filter(mc => mc.priority === 'critical' || mc.priority === 'high');
+                      if (dealbreakers.length === 0) return null;
+                      return (
+                        <div className="mt-1">
+                          <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2 px-1">
+                            Dealbreakers ({dealbreakers.length})
+                          </h3>
+                          <div className="space-y-1.5">
+                            {dealbreakers.map((mc) => {
+                              const priorityColor = PRIORITY_COLORS[mc.priority];
+                              return (
+                                <div
+                                  key={mc.id}
+                                  className="rounded-lg p-2.5 bg-[#12121a] border-l-[3px] cursor-pointer hover:bg-[#16161f] transition-colors"
+                                  style={{ borderLeftColor: priorityColor }}
+                                  onClick={() => {
+                                    setActiveCommentId(mc.id);
+                                    setViewMode('meta');
+                                    setTimeout(() => {
+                                      const el = window.document.getElementById(`comment-${mc.id}`);
+                                      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }, 50);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <span
+                                      className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                                      style={{ backgroundColor: `${priorityColor}20`, color: priorityColor }}
+                                    >
+                                      {mc.priority.toUpperCase()}
+                                    </span>
+                                    <span className="text-[10px] text-neutral-600 ml-auto">
+                                      L{mc.start_line + 1}{mc.end_line !== mc.start_line ? `-${mc.end_line + 1}` : ''}
+                                    </span>
+                                  </div>
+                                  <p className="text-[12px] text-[#b4b4c4] leading-relaxed">{mc.content}</p>
+                                  <div className="flex items-center gap-1 mt-1.5">
+                                    {mc.sources.map((source, si) => (
+                                      <span
+                                        key={si}
+                                        className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
+                                        style={{ backgroundColor: source.persona_color }}
+                                        title={source.persona_name}
+                                      >
+                                        {source.persona_name.charAt(0)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Suggestions section: medium + low, collapsible */}
+                    {(() => {
+                      const suggestions = sortedMetaComments.filter(mc => mc.priority === 'medium' || mc.priority === 'low');
+                      if (suggestions.length === 0) return null;
+                      return (
+                        <div className="mt-1">
+                          <button
+                            className="flex items-center gap-1.5 text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 px-1 hover:text-neutral-300 transition-colors w-full text-left"
+                            onClick={() => setSuggestionsExpanded(!suggestionsExpanded)}
+                          >
+                            <svg
+                              className={`w-3 h-3 transition-transform ${suggestionsExpanded ? 'rotate-90' : ''}`}
+                              fill="currentColor" viewBox="0 0 20 20"
+                            >
+                              <path d="M6 6L14 10L6 14V6Z" />
+                            </svg>
+                            Suggestions ({suggestions.length})
+                          </button>
+                          {suggestionsExpanded && (
+                            <div className="space-y-1.5">
+                              {suggestions.map((mc) => {
+                                const priorityColor = PRIORITY_COLORS[mc.priority];
+                                return (
+                                  <div
+                                    key={mc.id}
+                                    className="rounded-lg p-2.5 bg-[#12121a] border-l-[3px] cursor-pointer hover:bg-[#16161f] transition-colors"
+                                    style={{ borderLeftColor: priorityColor }}
+                                    onClick={() => {
+                                      setActiveCommentId(mc.id);
+                                      setViewMode('meta');
+                                      setTimeout(() => {
+                                        const el = window.document.getElementById(`comment-${mc.id}`);
+                                        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                      }, 50);
+                                    }}
+                                  >
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <span
+                                        className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                                        style={{ backgroundColor: `${priorityColor}20`, color: priorityColor }}
+                                      >
+                                        {mc.priority.toUpperCase()}
+                                      </span>
+                                      <span className="text-[10px] text-neutral-600 ml-auto">
+                                        L{mc.start_line + 1}{mc.end_line !== mc.start_line ? `-${mc.end_line + 1}` : ''}
+                                      </span>
+                                    </div>
+                                    <p className="text-[12px] text-[#b4b4c4] leading-relaxed">{mc.content}</p>
+                                    <div className="flex items-center gap-1 mt-1.5">
+                                      {mc.sources.map((source, si) => (
+                                        <span
+                                          key={si}
+                                          className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
+                                          style={{ backgroundColor: source.persona_color }}
+                                          title={source.persona_name}
+                                        >
+                                          {source.persona_name.charAt(0)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </>
+            )}
+
             {/* META VIEW */}
             {viewMode === 'meta' && (
               <>
