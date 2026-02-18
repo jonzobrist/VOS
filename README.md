@@ -1,4 +1,7 @@
 # VOS
+
+[![CI](https://github.com/Bluesun-Networks/VOS/actions/workflows/ci.yml/badge.svg)](https://github.com/Bluesun-Networks/VOS/actions/workflows/ci.yml)
+
 ### Voxora · Opinari · Scrutara
 *Many voices. Many opinions. One scrutiny.*
 
