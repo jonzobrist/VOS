@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, Boolean, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
 
@@ -9,27 +9,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-class DbPersona(Base):
-    __tablename__ = "personas"
-
-    id = Column(String, primary_key=True)
-    name = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    system_prompt = Column(Text, nullable=False)
-    tone = Column(String, default="neutral")
-    focus_areas = Column(JSON, default=list)
-    color = Column(String, default="#6366f1")
-    output_requirements = Column(Text, nullable=True)
-    reference_notes = Column(Text, nullable=True)
-    examples = Column(Text, nullable=True)
-    is_default = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    sort_order = Column(Integer, default=0)
-    color_theme = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
 class DbDocument(Base):
     __tablename__ = "documents"
 
@@ -38,27 +17,11 @@ class DbDocument(Base):
     description = Column(Text, nullable=True)
     content = Column(Text, nullable=False)
     repo_path = Column(String, nullable=True)
+    is_archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     reviews = relationship("DbReview", back_populates="document", cascade="all, delete-orphan")
-
-
-class DbReviewJob(Base):
-    __tablename__ = "review_jobs"
-
-    id = Column(String, primary_key=True)
-    document_id = Column(String, ForeignKey("documents.id"), nullable=False)
-    status = Column(String, default="queued")  # queued, running, completed, failed
-    provider = Column(String, nullable=True)  # e.g. "anthropic"
-    model = Column(String, nullable=True)  # e.g. "claude-sonnet-4-5-20250929"
-    trigger = Column(String, default="manual")  # manual, auto
-    error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
-
-    document = relationship("DbDocument")
-    reviews = relationship("DbReview", back_populates="job")
 
 
 class DbReview(Base):
@@ -68,12 +31,10 @@ class DbReview(Base):
     document_id = Column(String, ForeignKey("documents.id"), nullable=False)
     persona_ids = Column(JSON, nullable=False)
     status = Column(String, default="pending")  # pending, running, completed, failed
-    job_id = Column(String, ForeignKey("review_jobs.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
 
     document = relationship("DbDocument", back_populates="reviews")
-    job = relationship("DbReviewJob", back_populates="reviews")
     comments = relationship("DbComment", back_populates="review", cascade="all, delete-orphan")
     meta_comments = relationship("DbMetaComment", back_populates="review", cascade="all, delete-orphan")
 

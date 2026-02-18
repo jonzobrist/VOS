@@ -85,3 +85,8 @@ body {
 }
 .animate-slide-in { animation: slideIn 0.3s ease-out; }
 .animate-pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+@keyframes connector-dash {
+  to { stroke-dashoffset: -20; }
+}
+.animate-connector-dash { animation: connector-dash 1s linear infinite; }

@@ -5,6 +5,7 @@ export interface Document {
   title: string;
   description?: string;
   content: string;
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
   review_count: number;
@@ -66,10 +67,28 @@ export interface MetaComment {
   created_at: string;
 }
 
-export async function fetchDocuments(): Promise<Document[]> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/documents/`);
+export async function fetchDocuments(includeArchived = false): Promise<Document[]> {
+  const params = includeArchived ? '?include_archived=true' : '';
+  const res = await fetch(`${API_BASE_URL}/api/v1/documents/${params}`);
   if (!res.ok) throw new Error('Failed to fetch documents');
   return res.json();
+}
+
+export async function archiveDocument(id: string): Promise<Document> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/documents/${id}/archive`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to archive document');
+  return res.json();
+}
+
+export async function restoreDocument(id: string): Promise<Document> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/documents/${id}/restore`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to restore document');
+  return res.json();
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/documents/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete document');
 }
 
 export async function fetchDocument(id: string): Promise<Document> {
