@@ -303,6 +303,7 @@ async def synthesize_meta_review(doc_id: str, review_id: str, db: Session = Depe
     # Build comments list from DB
     comments_data = [
         {
+            "id": c.id,
             "persona_id": c.persona_id,
             "persona_name": c.persona_name,
             "persona_color": c.persona_color,

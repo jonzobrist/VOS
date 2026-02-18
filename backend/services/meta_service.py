@@ -94,11 +94,12 @@ Return ONLY the JSON array.
             )
 
             response_text = message.content[0].text.strip()
-            # Strip markdown code fences if present
+            # Strip markdown code fences if present (```json ... ``` or ``` ... ```)
             if response_text.startswith("```"):
-                response_text = response_text.split("\n", 1)[1]
-                if response_text.endswith("```"):
-                    response_text = response_text[:-3].strip()
+                # Remove opening fence line
+                response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+                # Remove closing fence
+                response_text = response_text.rsplit("```", 1)[0].strip()
 
             synthesis = json.loads(response_text)
         except Exception as e:
