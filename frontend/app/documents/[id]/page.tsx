@@ -67,12 +67,17 @@ export default function DocumentDetailPage() {
         setDocument(doc);
         setPersonas(p);
         setSelectedPersonaIds(p.map(pp => pp.id));
-        if (existingComments.length > 0 && !autoReview) {
+        if (existingComments.length > 0) {
           setComments(existingComments);
           // Load cached meta comments from the latest completed review
           const completedReview = reviews.find(r => r.status === 'completed');
           if (completedReview) {
             setCurrentReviewId(completedReview.id);
+            // If autoReview was requested but a completed review exists, skip re-review
+            if (autoReview) {
+              hasStartedAutoReview.current = true;
+              router.replace(`/documents/${docId}`);
+            }
             try {
               const cached = await fetchMetaComments(docId, completedReview.id);
               if (cached.length > 0) {
