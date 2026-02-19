@@ -28,3 +28,7 @@ repos/
 
 # Logs
 *.log
+
+# Run tooling — track scripts, ignore runtime artifacts
+.run/logs/
+.run/*.pid

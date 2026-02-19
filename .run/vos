@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────
+# VOS run controller — start / stop / restart / status / logs
+# Usage:  .run/vos {start|stop|restart|status|logs} [backend|frontend|all]
+# ──────────────────────────────────────────────────────────────
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOGDIR="$ROOT/.run/logs"
+PIDDIR="$ROOT/.run"
+
+BACKEND_PORT="${VOS_BACKEND_PORT:-8001}"
+FRONTEND_PORT="${VOS_FRONTEND_PORT:-3011}"
+
+mkdir -p "$LOGDIR"
+
+# ── colours ───────────────────────────────────────────────────
+R='\033[0;31m'; G='\033[0;32m'; Y='\033[0;33m'; C='\033[0;36m'; NC='\033[0m'
+
+info()  { printf "${C}▸${NC} %s\n" "$*"; }
+ok()    { printf "${G}✔${NC} %s\n" "$*"; }
+warn()  { printf "${Y}⚠${NC} %s\n" "$*"; }
+fail()  { printf "${R}✖${NC} %s\n" "$*"; }
+
+# ── helpers ───────────────────────────────────────────────────
+_pid_for() {
+    local pidfile="$PIDDIR/$1.pid"
+    if [[ -f "$pidfile" ]]; then
+        local pid
+        pid=$(cat "$pidfile")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+            return 0
+        fi
+        rm -f "$pidfile"
+    fi
+    return 1
+}
+
+_wait_for_port() {
+    local port=$1 tries=0
+    while ! lsof -ti :"$port" >/dev/null 2>&1; do
+        sleep 0.5
+        tries=$((tries + 1))
+        if [[ $tries -ge 20 ]]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# ── backend ───────────────────────────────────────────────────
+start_backend() {
+    if _pid_for backend >/dev/null 2>&1; then
+        warn "Backend already running (PID $(_pid_for backend))"
+        return 0
+    fi
+
+    # kill anything squatting on the port
+    lsof -ti :"$BACKEND_PORT" | xargs kill -9 2>/dev/null || true
+
+    info "Starting backend on :${BACKEND_PORT} …"
+
+    # Load .env
+    if [[ -f "$ROOT/backend/.env" ]]; then
+        set -a
+        # shellcheck disable=SC1091
+        source "$ROOT/backend/.env"
+        set +a
+    fi
+
+    cd "$ROOT/backend"
+    nohup "$ROOT/backend/.venv/bin/uvicorn" main:app \
+        --host 0.0.0.0 \
+        --port "$BACKEND_PORT" \
+        --reload \
+        > "$LOGDIR/backend.log" 2>&1 &
+    local pid=$!
+    echo "$pid" > "$PIDDIR/backend.pid"
+
+    if _wait_for_port "$BACKEND_PORT"; then
+        ok "Backend started (PID $pid, port $BACKEND_PORT)"
+        ok "Logs → .run/logs/backend.log"
+    else
+        fail "Backend failed to start — check .run/logs/backend.log"
+        cat "$LOGDIR/backend.log" | tail -20
+        return 1
+    fi
+}
+
+stop_backend() {
+    if pid=$(_pid_for backend 2>/dev/null); then
+        info "Stopping backend (PID $pid) …"
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+        rm -f "$PIDDIR/backend.pid"
+        ok "Backend stopped"
+    else
+        # also clean up port in case of orphaned process
+        lsof -ti :"$BACKEND_PORT" | xargs kill -9 2>/dev/null || true
+        warn "Backend was not running (cleaned port $BACKEND_PORT)"
+    fi
+}
+
+# ── frontend ──────────────────────────────────────────────────
+start_frontend() {
+    if _pid_for frontend >/dev/null 2>&1; then
+        warn "Frontend already running (PID $(_pid_for frontend))"
+        return 0
+    fi
+
+    # kill anything squatting on the port
+    lsof -ti :"$FRONTEND_PORT" | xargs kill -9 2>/dev/null || true
+
+    info "Starting frontend on :${FRONTEND_PORT} …"
+
+    cd "$ROOT/frontend"
+    PORT="$FRONTEND_PORT" nohup bun run dev --port "$FRONTEND_PORT" \
+        > "$LOGDIR/frontend.log" 2>&1 &
+    local pid=$!
+    echo "$pid" > "$PIDDIR/frontend.pid"
+
+    if _wait_for_port "$FRONTEND_PORT"; then
+        ok "Frontend started (PID $pid, port $FRONTEND_PORT)"
+        ok "Logs → .run/logs/frontend.log"
+    else
+        fail "Frontend failed to start — check .run/logs/frontend.log"
+        cat "$LOGDIR/frontend.log" | tail -20
+        return 1
+    fi
+}
+
+stop_frontend() {
+    if pid=$(_pid_for frontend 2>/dev/null); then
+        info "Stopping frontend (PID $pid) …"
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+        rm -f "$PIDDIR/frontend.pid"
+        ok "Frontend stopped"
+    else
+        lsof -ti :"$FRONTEND_PORT" | xargs kill -9 2>/dev/null || true
+        warn "Frontend was not running (cleaned port $FRONTEND_PORT)"
+    fi
+}
+
+# ── status ────────────────────────────────────────────────────
+status_all() {
+    echo ""
+    printf "${C}VOS Status${NC}\n"
+    echo "──────────────────────────────────────"
+
+    if pid=$(_pid_for backend 2>/dev/null); then
+        local health
+        health=$(curl -sL --max-time 3 "http://localhost:${BACKEND_PORT}/api/v1/status/" 2>/dev/null || echo '{}')
+        local st
+        st=$(echo "$health" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown")
+        printf "  Backend   ${G}● running${NC}  PID %-6s  port %-5s  health: %s\n" "$pid" "$BACKEND_PORT" "$st"
+    else
+        printf "  Backend   ${R}○ stopped${NC}\n"
+    fi
+
+    if pid=$(_pid_for frontend 2>/dev/null); then
+        printf "  Frontend  ${G}● running${NC}  PID %-6s  port %-5s\n" "$pid" "$FRONTEND_PORT"
+    else
+        printf "  Frontend  ${R}○ stopped${NC}\n"
+    fi
+
+    echo "──────────────────────────────────────"
+    echo "  Logs: .run/logs/{backend,frontend}.log"
+    echo ""
+}
+
+# ── logs ──────────────────────────────────────────────────────
+show_logs() {
+    local svc="${1:-all}"
+    case "$svc" in
+        backend)  tail -f "$LOGDIR/backend.log" ;;
+        frontend) tail -f "$LOGDIR/frontend.log" ;;
+        all)      tail -f "$LOGDIR/backend.log" "$LOGDIR/frontend.log" ;;
+    esac
+}
+
+# ── main ──────────────────────────────────────────────────────
+cmd="${1:-help}"
+target="${2:-all}"
+
+case "$cmd" in
+    start)
+        case "$target" in
+            backend)  start_backend ;;
+            frontend) start_frontend ;;
+            all)      start_backend; start_frontend ;;
+        esac
+        ;;
+    stop)
+        case "$target" in
+            backend)  stop_backend ;;
+            frontend) stop_frontend ;;
+            all)      stop_frontend; stop_backend ;;
+        esac
+        ;;
+    restart)
+        case "$target" in
+            backend)  stop_backend;  start_backend ;;
+            frontend) stop_frontend; start_frontend ;;
+            all)      stop_frontend; stop_backend; start_backend; start_frontend ;;
+        esac
+        ;;
+    status|st)
+        status_all
+        ;;
+    logs|log)
+        show_logs "$target"
+        ;;
+    *)
+        echo ""
+        echo "Usage: .run/vos {start|stop|restart|status|logs} [backend|frontend|all]"
+        echo ""
+        echo "  start   [target]  Start services (default: all)"
+        echo "  stop    [target]  Stop services (default: all)"
+        echo "  restart [target]  Restart services (default: all)"
+        echo "  status            Show running status + health"
+        echo "  logs    [target]  Tail logs (default: all)"
+        echo ""
+        echo "Environment:"
+        echo "  VOS_BACKEND_PORT   Backend port  (default: 8001)"
+        echo "  VOS_FRONTEND_PORT  Frontend port (default: 3011)"
+        echo ""
+        ;;
+esac

@@ -4,31 +4,31 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
+      - "${VOS_FRONTEND_PORT:-3011}:3011"
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     environment:
-      - NEXT_PUBLIC_API_URL=https://vos-api.zlyxy.me
+      - NEXT_PUBLIC_API_URL=http://backend:8001
+      - PORT=3011
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "${VOS_BACKEND_PORT:-8001}:8001"
     volumes:
       - ./backend:/app
-      - vos_data:/app/data
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - REPOS_BASE_PATH=/tmp/vos-repos
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./vos.db}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
       timeout: 5s
       retries: 3
 
-volumes:
-  vos_data:
+volumes: {}
